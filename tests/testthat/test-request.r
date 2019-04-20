@@ -1,35 +1,29 @@
 context("Request")
 
-test_that("status codes returned as expected", {
-
-  expect_equal(GET("http://httpbin.org/status/320")$status, 320)
-  expect_equal(GET("http://httpbin.org/status/404")$status, 404)
-  expect_equal(GET("http://httpbin.org/status/418")$status, 418)
-
+test_that("c.request overwrites repeated options", {
+  expect_equal(
+    c(request(url = "a"), request(url = "b")),
+    request(url = "b")
+  )
 })
 
-test_that("status converted to errors", {
-
-  s200 <- GET("http://httpbin.org/status/200")
-  s300 <- GET("http://httpbin.org/status/300")
-  s404 <- GET("http://httpbin.org/status/404")
-  s500 <- GET("http://httpbin.org/status/500")
-
-  expect_equal(stop_for_status(s200), TRUE)
-  expect_error(stop_for_status(s300), c("redirection.*\\(300\\)"))
-  expect_error(stop_for_status(s404), c("client.*\\(404\\)"))
-  expect_error(stop_for_status(s500), c("server.*\\(500\\)"))
+test_that("c.request merges headers", {
+  expect_equal(
+    c(request(headers = c("a" = "a")), request(headers = c("b" = "b"))),
+    request(headers = c("a" = "a", "b" = "b"))
+  )
 })
 
-test_that("headers returned as expected", {
-  round_trip <- function(...) {
-    req <- GET("http://httpbin.org/headers", add_headers(...))
-    headers <- content(req)$headers
-    names(headers) <- tolower(names(headers))
-    headers
-  }
+test_that("non-http methods don't parse headers", {
+  # skip on travis to avoid hammering the FTP server, which doesn't
+  # seem to be able to handle multiple simultaneous requests
+  skip_on_travis()
 
-  expect_equal(round_trip(a = 1)$a, "1")
-  expect_equal(round_trip(a = "a + b")$a, "a + b")
-
+  # Must not reuse or FTP connection is closed at the wrong time,
+  # causing problems in final test
+  r <- GET(
+    "ftp://cran.r-project.org/incoming/",
+    config(forbid_reuse = TRUE)
+  )
+  expect_type(r$headers, "raw")
 })

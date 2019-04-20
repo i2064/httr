@@ -3,22 +3,45 @@
 # Refreshes the given token, and returns a new credential with a
 # valid access_token. Based on:
 # https://developers.google.com/accounts/docs/OAuth2InstalledApp#refresh
-refresh_oauth2.0 <- function(endpoint, app, credentials) {
+refresh_oauth2.0 <- function(endpoint, app, credentials, user_params = NULL,
+                             use_basic_auth = FALSE) {
   if (is.null(credentials$refresh_token)) {
     stop("Refresh token not available", call. = FALSE)
   }
 
   refresh_url <- endpoint$access
-  body <- list(
+  req_params <- list(
     refresh_token = credentials$refresh_token,
     client_id = app$key,
-    client_secret = app$secret,
     grant_type = "refresh_token"
   )
 
-  response <- POST(refresh_url, body = body, multipart = FALSE)
-  stop_for_status(response)
+  if (!is.null(user_params)) {
+    req_params <- utils::modifyList(user_params, req_params)
+  }
 
+  if (isTRUE(use_basic_auth)) {
+    response <- POST(refresh_url,
+      body = req_params, encode = "form",
+      authenticate(app$key, app$secret, type = "basic")
+    )
+  } else {
+    req_params$client_secret <- app$secret
+    response <- POST(refresh_url, body = req_params, encode = "form")
+  }
+
+  err <- find_oauth2.0_error(response)
+  if (!is.null(err)) {
+    lines <- c(
+      paste0("Unable to refresh token: ", err$error),
+      err$error_description,
+      err$error_uri
+    )
+    warning(paste(lines, collapse = "\n"), call. = FALSE)
+    return(NULL)
+  }
+
+  stop_for_status(response)
   refresh_data <- content(response)
-  modifyList(credentials, refresh_data)
+  utils::modifyList(credentials, refresh_data)
 }

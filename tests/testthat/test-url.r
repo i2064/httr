@@ -1,7 +1,6 @@
 context("URL parsing and building")
 
 test_that("parse_url works as expected", {
-
   urls <- list(
     "http://google.com/",
     "http://google.com/path",
@@ -14,9 +13,10 @@ test_that("parse_url works as expected", {
     "svn+ssh://my.svn.server/repo/trunk"
   )
 
-  expect_equal(lapply(urls, function(u) build_url(parse_url(u))),
-               urls)
-
+  expect_equal(
+    lapply(urls, function(u) build_url(parse_url(u))),
+    urls
+  )
 })
 
 
@@ -54,4 +54,43 @@ test_that("handle_url modifies url with named components", {
 test_that("handle_url ignores unnamed arguments", {
   hu <- handle_url(NULL, "http://google.com", 1, 2, 3)
   expect_equal(hu$url, "http://google.com")
+})
+
+test_that("build_url collapse path", {
+  url <- modify_url("http://google.com", path = c("one", "two"))
+  expect_equal(url, "http://google.com/one/two")
+})
+
+test_that("build_url drops leading / in path", {
+  url <- modify_url("http://google.com", path = "/one")
+  expect_equal(url, "http://google.com/one")
+})
+
+test_that("build_url drops null or empty query", {
+  url <- modify_url("http://google.com", query = list(a = 1, b = NULL))
+  expect_equal(url, "http://google.com/?a=1")
+  url <- modify_url("http://google.com", query = list(a = NULL))
+  expect_equal(url, "http://google.com/")
+  url <- modify_url("http://google.com", query = list())
+  expect_equal(url, "http://google.com/")
+})
+
+test_that("parse_url pulls off domain correctly given query without trailing '/'", {
+  url <- modify_url("http://google.com?a=1", query = list(b = 2))
+  expect_equal(url, "http://google.com/?a=1&b=2")
+})
+
+test_that("parse_url preserves leading / in path", {
+  url <- parse_url("file:///tmp/foobar")
+  expect_equal(url$path, "/tmp/foobar")
+})
+
+# compose_query -----------------------------------------------------------
+
+test_that("I() prevents escaping", {
+  expect_equal(compose_query(list(x = I("&"))), "x=&")
+})
+
+test_that("null elements are dropped", {
+  expect_equal(compose_query(list(x = 1, y = NULL)), "x=1")
 })

@@ -2,25 +2,30 @@
 #'
 #' @param type Type of progress to display: either number of bytes uploaded
 #'   or downloaded.
+#' @param con Connection to send output too. Usually `stdout()` or
+#'    `stderr`.
 #' @export
 #' @examples
+#' cap_speed <- config(max_recv_speed_large = 10000)
 #' \donttest{
 #' # If file size is known, you get a progress bar:
-#' x <- GET("http://courses.had.co.nz/12-oscon/slides.zip", progress())
+#' x <- GET("http://httpbin.org/bytes/102400", progress(), cap_speed)
 #' # Otherwise you get the number of bytes downloaded:
-#' x <- GET("http://httpbin.org/drip?numbytes=4000&duration=3", progress())
+#' x <- GET("http://httpbin.org/stream-bytes/102400", progress(), cap_speed)
 #' }
-progress <- function(type = c("down", "up")) {
+progress <- function(type = c("down", "up"), con = stdout()) {
   type <- match.arg(type)
 
-  config(noprogress = FALSE, progressfunction = progress_bar(type))
+  request(options = list(
+    noprogress = FALSE,
+    progressfunction = progress_bar(type, con)
+  ))
 }
 
-progress_bar <- function(type ) {
+progress_bar <- function(type, con) {
   bar <- NULL
-  first <- TRUE
 
-  unsafe <- function(down, up) {
+  show_progress <- function(down, up) {
     if (type == "down") {
       total <- down[[1]]
       now <- down[[2]]
@@ -29,43 +34,26 @@ progress_bar <- function(type ) {
       now <- up[[2]]
     }
 
-    # First progress request on new file
     if (total == 0 && now == 0) {
+      # Reset progress bar when seeing first byte
       bar <<- NULL
-      first <<- TRUE
-      return()
-    }
-
-    if (total == 0) {
-      if (first) {
-        first <<- FALSE
-      }
-      cat("\rDownloading: ", bytes(now, digits = 2), "     ", sep = "")
-      if (now == total) cat("\n")
-      flush.console()
+    } else if (total == 0) {
+      cat("\rDownloading: ", bytes(now, digits = 2), "     ", sep = "", file = con)
+      utils::flush.console()
+      # Can't automatically add newline on completion because there's no
+      # way to tell when then the file has finished downloading
     } else {
       if (is.null(bar)) {
-        bar <<- txtProgressBar(max = total, style = 3)
+        bar <<- utils::txtProgressBar(max = total, style = 3, file = con)
       }
-      setTxtProgressBar(bar, now)
+      utils::setTxtProgressBar(bar, now)
+      if (now == total) close(bar)
     }
 
-    0L
+    TRUE
   }
 
-  # Catch errors and interrupts - otherwise you'll crash R
-  function(down, up) {
-    tryCatch(unsafe(down, up),
-      error = function(e, ...) {
-        message("Error:", e$message)
-        1L
-      },
-      interrupt = function(...) {
-        message("Interrupted by user")
-        1L
-      }
-    )
-  }
+  show_progress
 }
 
 
@@ -75,11 +63,13 @@ bytes <- function(x, digits = 3, ...) {
     unit <- "B"
   } else {
     unit <- c("kB", "MB", "GB", "TB")[[power]]
-    x <- x / (1000 ^ power)
+    x <- x / (1000^power)
   }
 
-  formatted <- format(signif(x, digits = digits), big.mark = ",",
-    scientific = FALSE)
+  formatted <- format(signif(x, digits = digits),
+    big.mark = ",",
+    scientific = FALSE
+  )
 
   paste0(formatted, " ", unit)
 }

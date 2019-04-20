@@ -1,21 +1,15 @@
 #' Send PATCH request to a server.
 #'
-#' @inheritParams GET
+#' @inherit GET params return
 #' @inheritParams POST
+#' @family http methods
 #' @export
-PATCH <- function(url = NULL, config = list(), ..., body = NULL,
-                  encode = c("multipart", "form", "json"),
-                  multipart = TRUE, handle = NULL) {
-
-  if (!missing(multipart)) {
-    warning("multiplart is deprecated, please use encode argument instead",
-      call. = FALSE)
-    encode <- if (multipart) "multipart" else "form"
-  }
+PATCH <- function(url = NULL, config = list(), ...,
+                  body = NULL, encode = c("multipart", "form", "json", "raw"),
+                  handle = NULL) {
   encode <- match.arg(encode)
 
   hu <- handle_url(handle, url, ...)
-  config <- make_config(config, ...)
-
-  make_request("patch", hu$handle, hu$url, config, body_config(body, encode))
+  req <- request_build("PATCH", hu$url, body_config(body, match.arg(encode)), config, ...)
+  request_perform(req, hu$handle$handle)
 }
